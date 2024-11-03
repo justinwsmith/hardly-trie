@@ -2,5 +2,9 @@
 name = "hardly-trie"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.79.0"
 
 [dependencies]
+
+[dev-dependencies]
+radix_trie = "0.2.1"

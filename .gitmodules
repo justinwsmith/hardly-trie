@@ -1,0 +1,3 @@
+[submodule "tests/data/wordlist"]
+	path = tests/data/wordlist
+	url = https://github.com/wordnik/wordlist.git
