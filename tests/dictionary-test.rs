@@ -38,7 +38,7 @@ fn insert_all_trie() {
     let now = Instant::now();
     find_all(&trie);
     let elapsed = now.elapsed();
-    println!("hardly_trie::Trie find: {:?}", elapsed);
+    println!("hardly_trie::Trie find: {elapsed:?}");
 }
 
 impl Collection for HashMap<String, String> {
@@ -47,7 +47,7 @@ impl Collection for HashMap<String, String> {
     }
 
     fn find(&self, key: &str) -> Option<&String> {
-        self.get(key.into())
+        self.get(key)
     }
 
     fn size(&self) -> usize {
@@ -65,7 +65,7 @@ fn insert_all_hashmap() {
     let now = Instant::now();
     find_all(&hashmap);
     let elapsed = now.elapsed();
-    println!("std::HashMap find: {:?}", elapsed);
+    println!("std::HashMap find: {elapsed:?}");
 }
 
 impl Collection for RxTrie<String, String> {
@@ -74,7 +74,7 @@ impl Collection for RxTrie<String, String> {
     }
 
     fn find(&self, key: &str) -> Option<&String> {
-        self.get(key.into())
+        self.get(key)
     }
 
     fn size(&self) -> usize {
@@ -92,7 +92,7 @@ fn insert_all_radixtrie() {
     let now = Instant::now();
     find_all(&trie);
     let elapsed = now.elapsed();
-    println!("radix_trie::Trie find: {:?}", elapsed);
+    println!("radix_trie::Trie find: {elapsed:?}");
 }
 
 fn insert_all<C: Collection>(c: &mut C) {
@@ -100,7 +100,7 @@ fn insert_all<C: Collection>(c: &mut C) {
         let line = line.strip_prefix('"').unwrap_or(line);
         let line = line.strip_suffix('"').unwrap_or(line);
         if let Some(val) = c.add(line) {
-            assert!(false, "What? {line} <> {val}");
+            panic!("What? {line} <> {val}");
         }
     }
 }

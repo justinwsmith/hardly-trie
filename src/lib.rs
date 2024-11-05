@@ -1,24 +1,34 @@
 #![allow(unused)]
+#![allow(clippy::missing_panics_doc)]
 
-enum TrieNode<T> {
-    LowNode { value: Option<T>, next: [Option<Box<TrieNode<T>>>; 16] },
-    HighNode { next: [Option<Box<TrieNode<T>>>; 16] },
+struct TrieNode<T> {
+    value: Option<T>,
+    next: [Option<Box<TrieNode<T>>>; 16],
 }
 
 impl<T> TrieNode<T> {
     #[must_use]
-    fn new_low_node() -> TrieNode<T> {
-        TrieNode::LowNode {
+    fn new() -> TrieNode<T> {
+        TrieNode {
             value: const { None },
             next: [const { None }; 16],
         }
     }
 
-    #[must_use]
-    fn new_high_node() -> TrieNode<T> {
-        TrieNode::HighNode {
-            next: [const { None }; 16],
-        }
+    fn value(&self) -> Option<&T> {
+        self.value.as_ref()
+    }
+
+    fn value_mut(&mut self) -> &mut Option<T> {
+        &mut self.value
+    }
+
+    fn next(&self) -> &[Option<Box<TrieNode<T>>>; 16] {
+        &self.next
+    }
+
+    fn next_mut(&mut self) -> &mut [Option<Box<TrieNode<T>>>; 16] {
+        &mut self.next
     }
 }
 
@@ -32,7 +42,7 @@ impl<T> Trie<T> {
     pub fn new() -> Trie<T> {
         Trie {
             len: 0,
-            root: TrieNode::new_low_node(),
+            root: TrieNode::new(),
         }
     }
 
@@ -41,57 +51,48 @@ impl<T> Trie<T> {
         let mut current_node = &self.root;
         let mut bytes = key;
         loop {
-            match (current_node) {
-                TrieNode::LowNode { value, next } => {
-                    if bytes.is_empty() {
-                        return value.as_ref();
-                    } else {
-                        let high_byte: usize = (bytes[0] >> 4).into();
-                        if let Some(high_node) = &next[high_byte] {
-                            current_node = high_node;
-                        } else {
-                            return None;
-                        }
-                    }
-                }
-                TrieNode::HighNode { next } => {
-                    let low_byte: usize = (bytes[0] & 0x0F).into();
-                    if let Some(low_node) = &next[low_byte] {
-                        bytes = &bytes[1..];
-                        current_node = low_node;
-                    } else {
-                        return None;
-                    }
-                }
+            if bytes.is_empty() {
+                break current_node.value();
             }
+            let high_byte: usize = (bytes[0] >> 4).into();
+            let low_byte: usize = (bytes[0] & 0x0F).into();
+
+            if current_node.next()[high_byte].is_none() {
+                break None;
+            }
+            current_node = current_node.next()[high_byte].as_ref().unwrap();
+
+            if current_node.next()[low_byte].is_none() {
+                break None;
+            }
+            current_node = current_node.next()[low_byte].as_ref().unwrap();
+            bytes = &bytes[1..];
         }
     }
 
-    pub fn insert(&mut self, key: &[u8], val: T) -> Option<T> {
+    pub fn insert(&mut self, key: &[u8], mut val: T) -> Option<T> {
         let mut current_node = &mut self.root;
         let mut bytes = key;
         let ret_val = loop {
-            match (current_node) {
-                TrieNode::LowNode { value, next } => {
-                    if bytes.is_empty() {
-                        break value.replace(val);
-                    } else {
-                        let high_byte: usize = (bytes[0] >> 4).into();
-                        if next[high_byte].is_none() {
-                            next[high_byte].replace(Box::new(TrieNode::new_high_node()));
-                        }
-                        current_node = next[high_byte].as_mut().unwrap();
-                    }
-                }
-                TrieNode::HighNode { next } => {
-                    let low_byte: usize = (bytes[0] & 0x0F).into();
-                    bytes = &bytes[1..];
-                    if next[low_byte].is_none() {
-                        next[low_byte].replace(Box::new(TrieNode::new_low_node()));
-                    }
-                    current_node = next[low_byte].as_mut().unwrap();
-                }
+            if bytes.is_empty() {
+                break current_node.value_mut().replace(val);
             }
+            let high_byte: usize = (bytes[0] >> 4).into();
+            let low_byte: usize = (bytes[0] & 0x0F).into();
+
+            current_node = if current_node.next()[high_byte].is_none() {
+                current_node.next_mut()[high_byte].insert(Box::new(TrieNode::new()))
+            } else {
+                current_node.next_mut()[high_byte].as_mut().unwrap()
+            };
+
+            current_node = if current_node.next()[low_byte].is_none() {
+                current_node.next_mut()[low_byte].insert(Box::new(TrieNode::new()))
+            } else {
+                current_node.next_mut()[low_byte].as_mut().unwrap()
+            };
+            
+            bytes = &bytes[1..];
         };
         if ret_val.is_none() {
             self.len += 1;
@@ -101,6 +102,10 @@ impl<T> Trie<T> {
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
