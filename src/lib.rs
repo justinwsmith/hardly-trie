@@ -46,8 +46,7 @@ impl<T> Trie<T> {
                     if bytes.is_empty() {
                         return value.as_ref();
                     } else {
-                        let byte = bytes[0];
-                        let high_byte: usize = (byte >> 4).into();
+                        let high_byte: usize = (bytes[0] >> 4).into();
                         if let Some(high_node) = &next[high_byte] {
                             current_node = high_node;
                         } else {
@@ -56,8 +55,7 @@ impl<T> Trie<T> {
                     }
                 }
                 TrieNode::HighNode { next } => {
-                    let byte = bytes[0];
-                    let low_byte: usize = (byte & 0x0F).into();
+                    let low_byte: usize = (bytes[0] & 0x0F).into();
                     if let Some(low_node) = &next[low_byte] {
                         bytes = &bytes[1..];
                         current_node = low_node;
@@ -78,8 +76,7 @@ impl<T> Trie<T> {
                     if bytes.is_empty() {
                         break value.replace(val);
                     } else {
-                        let byte = bytes[0];
-                        let high_byte: usize = (byte >> 4).into();
+                        let high_byte: usize = (bytes[0] >> 4).into();
                         if next[high_byte].is_none() {
                             next[high_byte].replace(Box::new(TrieNode::new_high_node()));
                         }
@@ -87,8 +84,7 @@ impl<T> Trie<T> {
                     }
                 }
                 TrieNode::HighNode { next } => {
-                    let byte = bytes[0];
-                    let low_byte: usize = (byte & 0x0F).into();
+                    let low_byte: usize = (bytes[0] & 0x0F).into();
                     bytes = &bytes[1..];
                     if next[low_byte].is_none() {
                         next[low_byte].replace(Box::new(TrieNode::new_low_node()));
