@@ -4,12 +4,14 @@ use hardly_trie::Trie;
 use std::collections::HashMap;
 use radix_trie::{Trie as RxTrie, TrieCommon};
 
+const CONTENTS: &str = include_str!("./data/wordlist/wordlist-20210729.txt");
 
 use std::time::Instant;
 
 trait Collection {
     fn add(&mut self, key: &str) -> Option<String>;
     fn find(&self, key: &str) -> Option<&String>;
+    fn size(&self) -> usize;
 }
 
 impl Collection for Trie<String> {
@@ -19,6 +21,10 @@ impl Collection for Trie<String> {
 
     fn find(&self, key: &str) -> Option<&String> {
         self.get(key.as_bytes())
+    }
+
+    fn size(&self) -> usize {
+        self.len()
     }
 }
 
@@ -43,6 +49,10 @@ impl Collection for HashMap<String, String> {
     fn find(&self, key: &str) -> Option<&String> {
         self.get(key.into())
     }
+
+    fn size(&self) -> usize {
+        self.len()
+    }
 }
 
 #[test]
@@ -66,6 +76,10 @@ impl Collection for RxTrie<String, String> {
     fn find(&self, key: &str) -> Option<&String> {
         self.get(key.into())
     }
+
+    fn size(&self) -> usize {
+        self.len()
+    }
 }
 
 #[test]
@@ -82,8 +96,7 @@ fn insert_all_radixtrie() {
 }
 
 fn insert_all<C: Collection>(c: &mut C) {
-    let contents = include_str!("./data/wordlist/wordlist-20210729.txt");
-    for line in contents.lines() {
+    for line in CONTENTS.lines() {
         let line = line.strip_prefix('"').unwrap_or(line);
         let line = line.strip_suffix('"').unwrap_or(line);
         if let Some(val) = c.add(line) {
@@ -93,10 +106,17 @@ fn insert_all<C: Collection>(c: &mut C) {
 }
 
 fn find_all<C: Collection>(c: &C) {
-    let contents = include_str!("./data/wordlist/wordlist-20210729.txt");
-    for line in contents.lines() {
+    let mut found: usize = 0;
+    let mut not_found: usize = 0;
+    for line in CONTENTS.lines() {
         let line = line.strip_prefix('"').unwrap_or(line);
         let line = line.strip_suffix('"').unwrap_or(line);
-        assert!(c.find(line).is_some(), "What? {line}");
+        if c.find(line).is_some() {
+            found += 1;
+        } else {
+            not_found += 1;
+        }
     }
+    assert_eq!(not_found, 0);
+    assert_eq!(found, c.size());
 }
