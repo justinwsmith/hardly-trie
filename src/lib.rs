@@ -1,117 +1,30 @@
 #![allow(unused)]
 
-
-struct LowNode<T> {
-    value: Option<T>,
-    next: [Option<Box<HighNode<T>>>; 16],
+enum TrieNode<T> {
+    LowNode { value: Option<T>, next: [Option<Box<TrieNode<T>>>; 16] },
+    HighNode { next: [Option<Box<TrieNode<T>>>; 16] },
 }
 
-impl<T> LowNode<T> {
+impl<T> TrieNode<T> {
     #[must_use]
-    fn new() -> LowNode<T> {
-        LowNode {
+    fn new_low_node() -> TrieNode<T> {
+        TrieNode::LowNode {
             value: const { None },
             next: [const { None }; 16],
         }
     }
-    #[must_use]
-    fn get(&self, bytes: &[u8]) -> Option<&T> {
-        let next_bytes = &bytes[1..];
-        if next_bytes.is_empty() {
-            self.value.as_ref()
-        } else {
-            let byte = next_bytes[0];
-            let high_byte: usize = (byte >> 4).into();
-            if let Some(high_node) = &self.next[high_byte] {
-                high_node.get(next_bytes)
-            } else {
-                None
-            }
-        }
-    }
-    #[must_use]
-    fn get_mut(&mut self, bytes: &[u8]) -> Option<&mut T> {
-        let next_bytes = &bytes[1..];
-        if next_bytes.is_empty() {
-            self.value.as_mut()
-        } else {
-            let byte = next_bytes[0];
-            let high_byte: usize = (byte >> 4).into();
-            if let Some(high_node) = &mut self.next[high_byte] {
-                high_node.get_mut(next_bytes)
-            } else {
-                None
-            }
-        }
-    }
-    fn insert(&mut self, bytes: &[u8], val: T) -> Option<T> {
-        let next_bytes = &bytes[1..];
-        if next_bytes.is_empty() {
-            self.value.replace(val)
-        } else {
-            let byte = next_bytes[0];
-            let high_byte: usize = (byte >> 4).into();
-            if let Some(high_node) = &mut self.next[high_byte] {
-                high_node.insert(next_bytes, val)
-            } else {
-                let mut high_node = Box::new(HighNode::new());
-                high_node.insert(next_bytes, val);
-                self.next[high_byte].replace(high_node);
-                None
-            }
-        }
-    }
-}
 
-struct HighNode<T> {
-    next: [Option<Box<LowNode<T>>>; 16],
-}
-
-impl<T> HighNode<T> {
     #[must_use]
-    fn new() -> HighNode<T> {
-        HighNode {
+    fn new_high_node() -> TrieNode<T> {
+        TrieNode::HighNode {
             next: [const { None }; 16],
-        }
-    }
-    #[must_use]
-    fn get(&self, bytes: &[u8]) -> Option<&T> {
-        let byte = bytes[0];
-        let low_byte: usize = (byte & 0x0F).into();
-        if let Some(low_node) = &self.next[low_byte] {
-            low_node.get(bytes)
-        } else {
-            None
-        }
-    }
-    #[must_use]
-    fn get_mut(&mut self, bytes: &[u8]) -> Option<&mut T> {
-        let byte = bytes[0];
-        let low_byte: usize = (byte & 0x0F).into();
-        if let Some(low_node) = &mut self.next[low_byte] {
-            low_node.get_mut(bytes)
-        } else {
-            None
-        }
-    }
-    fn insert(&mut self, bytes: &[u8], val: T) -> Option<T> {
-        let byte = bytes[0];
-        let low_byte: usize = (byte & 0x0F).into();
-        if let Some(low_node) = &mut self.next[low_byte] {
-            low_node.insert(bytes, val)
-        } else {
-            let mut low_node = Box::new(LowNode::new());
-            low_node.insert(bytes, val);
-            self.next[low_byte].replace(low_node);
-            None
         }
     }
 }
 
 pub struct Trie<T> {
     len: usize,
-    value: Option<T>,
-    next: [Option<Box<HighNode<T>>>; 16],
+    root: TrieNode<T>,
 }
 
 impl<T> Trie<T> {
@@ -119,55 +32,75 @@ impl<T> Trie<T> {
     pub fn new() -> Trie<T> {
         Trie {
             len: 0,
-            value: const { None },
-            next: [const { None }; 16],
+            root: TrieNode::new_low_node(),
         }
     }
+
     #[must_use]
-    pub fn get(&self, bytes: &[u8]) -> Option<&T> {
-        if bytes.is_empty() {
-            self.value.as_ref()
-        } else {
-            let byte = bytes[0];
-            let high_byte: usize = (byte >> 4).into();
-            if let Some(high_node) = &self.next[high_byte] {
-                high_node.get(bytes)
-            } else {
-                None
+    pub fn get(&self, key: &[u8]) -> Option<&T> {
+        let mut current_node = &self.root;
+        let mut bytes = key;
+        loop {
+            match (current_node) {
+                TrieNode::LowNode { value, next } => {
+                    if bytes.is_empty() {
+                        return value.as_ref();
+                    } else {
+                        let byte = bytes[0];
+                        let high_byte: usize = (byte >> 4).into();
+                        if let Some(high_node) = &next[high_byte] {
+                            current_node = high_node;
+                        } else {
+                            return None;
+                        }
+                    }
+                }
+                TrieNode::HighNode { next } => {
+                    let byte = bytes[0];
+                    let low_byte: usize = (byte & 0x0F).into();
+                    if let Some(low_node) = &next[low_byte] {
+                        bytes = &bytes[1..];
+                        current_node = low_node;
+                    } else {
+                        return None;
+                    }
+                }
             }
         }
     }
-    #[must_use]
-    pub fn get_mut(&mut self, bytes: &[u8]) -> Option<&mut T> {
-        if bytes.is_empty() {
-            self.value.as_mut()
-        } else {
-            let byte = bytes[0];
-            let high_byte: usize = (byte >> 4).into();
-            if let Some(high_node) = &mut self.next[high_byte] {
-                high_node.get_mut(bytes)
-            } else {
-                None
-            }
-        }
-    }
-    pub fn insert(&mut self, bytes: &[u8], val: T) -> Option<T> {
-        let retval = if bytes.is_empty() {
-            self.value.replace(val)
-        } else {
-            let byte = bytes[0];
-            let high_byte: usize = (byte >> 4).into();
-            if let Some(high_node) = &mut self.next[high_byte] {
-                high_node.insert(bytes, val)
-            } else {
-                let mut high_node = Box::new(HighNode::new());
-                high_node.insert(bytes, val);
-                self.next[high_byte].replace(high_node);
-                None
+
+    pub fn insert(&mut self, key: &[u8], val: T) -> Option<T> {
+        let mut current_node = &mut self.root;
+        let mut bytes = key;
+        let ret_val = loop {
+            match (current_node) {
+                TrieNode::LowNode { value, next } => {
+                    if bytes.is_empty() {
+                        break value.replace(val);
+                    } else {
+                        let byte = bytes[0];
+                        let high_byte: usize = (byte >> 4).into();
+                        if next[high_byte].is_none() {
+                            next[high_byte].replace(Box::new(TrieNode::new_high_node()));
+                        }
+                        current_node = next[high_byte].as_mut().unwrap();
+                    }
+                }
+                TrieNode::HighNode { next } => {
+                    let byte = bytes[0];
+                    let low_byte: usize = (byte & 0x0F).into();
+                    bytes = &bytes[1..];
+                    if next[low_byte].is_none() {
+                        next[low_byte].replace(Box::new(TrieNode::new_low_node()));
+                    }
+                    current_node = next[low_byte].as_mut().unwrap();
+                }
             }
         };
-        if retval.is_none() { self.len += 1; }
-        retval
+        if ret_val.is_none() {
+            self.len += 1;
+        }
+        ret_val
     }
 
     pub fn len(&self) -> usize {
@@ -190,27 +123,28 @@ mod tests {
     fn it_works() {
         let mut trie: Trie<usize> = Trie::new();
         let key = "aa".as_bytes();
-        trie.insert(key, 1);
+        assert_eq!(trie.insert(key, 1), None);
         assert_eq!(trie.get(key), Some(&1));
 
 
-        trie.insert(&[1, 3, 7, 2], 3);
+        assert_eq!(trie.insert(&[1, 3, 7, 2], 3), None);
         assert_eq!(trie.get(&[]), None);
         assert_eq!(trie.get(&[1]), None);
         assert_eq!(trie.get(&[1, 3]), None);
         assert_eq!(trie.get(&[1, 3, 7]), None);
         assert_eq!(trie.get(&[1, 3, 7, 2]), Some(&3));
-        trie.insert(&[], 7);
+        assert_eq!(trie.insert(&[], 7), None);
         assert_eq!(trie.get(&[]), Some(&7));
         assert_eq!(trie.get(&[1]), None);
         assert_eq!(trie.get(&[1, 3]), None);
         assert_eq!(trie.get(&[1, 3, 7]), None);
         assert_eq!(trie.get(&[1, 3, 7, 2]), Some(&3));
-        trie.insert(&[1, 3], 5);
+        assert_eq!(trie.insert(&[1, 3], 5), None);
         assert_eq!(trie.get(&[]), Some(&7));
         assert_eq!(trie.get(&[1]), None);
         assert_eq!(trie.get(&[1, 3]), Some(&5));
         assert_eq!(trie.get(&[1, 3, 7]), None);
         assert_eq!(trie.get(&[1, 3, 7, 2]), Some(&3));
+        assert_eq!(trie.insert(&[1, 3], 6), Some(5));
     }
 }
