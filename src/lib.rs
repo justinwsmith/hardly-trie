@@ -1,6 +1,8 @@
 #![allow(unused)]
 #![allow(clippy::missing_panics_doc)]
 
+use std::collections::LinkedList;
+
 struct TrieNode<T> {
     value: Option<T>,
     next: [Option<Box<TrieNode<T>>>; 16],
@@ -13,6 +15,20 @@ impl<T> TrieNode<T> {
             value: const { None },
             next: [const { None }; 16],
         }
+    }
+
+    fn count_children(&self) -> usize {
+        let mut count = 0;
+        for i in 0..16 {
+            if self.next[i].is_some() {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    fn value_take(&mut self) -> Option<T> {
+        self.value.take()
     }
 
     fn value(&self) -> Option<&T> {
@@ -29,6 +45,14 @@ impl<T> TrieNode<T> {
 
     fn next_mut(&mut self) -> &mut [Option<Box<TrieNode<T>>>; 16] {
         &mut self.next
+    }
+
+    fn child(&self, index: usize) -> Option<&TrieNode<T>> {
+        self.next[index].as_deref()
+    }
+
+    fn child_mut(&mut self, index: usize) -> &mut Option<Box<TrieNode<T>>> {
+        &mut self.next[index]
     }
 }
 
@@ -70,6 +94,32 @@ impl<T> Trie<T> {
         }
     }
 
+
+    #[must_use]
+    pub fn get_mut(&mut self, key: &[u8]) -> Option<&mut T> {
+        let mut current_node = &mut self.root;
+        let mut bytes = key;
+        loop {
+            if bytes.is_empty() {
+                break current_node.value_mut().as_mut();
+            }
+            let high_byte: usize = (bytes[0] >> 4).into();
+            let low_byte: usize = (bytes[0] & 0x0F).into();
+
+            if current_node.next()[high_byte].is_none() {
+                break None;
+            }
+            current_node = current_node.child_mut(high_byte).as_mut().unwrap();
+
+            if current_node.next()[low_byte].is_none() {
+                break None;
+            }
+            current_node = current_node.child_mut(low_byte).as_mut().unwrap();
+            bytes = &bytes[1..];
+        }
+    }
+
+
     pub fn insert(&mut self, key: &[u8], mut val: T) -> Option<T> {
         let mut current_node = &mut self.root;
         let mut bytes = key;
@@ -91,7 +141,7 @@ impl<T> Trie<T> {
             } else {
                 current_node.next_mut()[low_byte].as_mut().unwrap()
             };
-            
+
             bytes = &bytes[1..];
         };
         if ret_val.is_none() {
