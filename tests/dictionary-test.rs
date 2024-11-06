@@ -10,8 +10,11 @@ use std::time::Instant;
 
 trait Collection {
     fn add(&mut self, key: &str) -> Option<String>;
+
     fn find(&self, key: &str) -> Option<&String>;
     fn size(&self) -> usize;
+
+    fn remove(&mut self, key: &str) -> Option<String>;
 }
 
 impl Collection for Trie<String> {
@@ -26,6 +29,10 @@ impl Collection for Trie<String> {
     fn size(&self) -> usize {
         self.len()
     }
+
+    fn remove(&mut self, key: &str) -> Option<String> {
+        self.delete(key.as_bytes())
+    }
 }
 
 #[test]
@@ -39,6 +46,10 @@ fn insert_all_trie() {
     find_all(&trie);
     let elapsed = now.elapsed();
     println!("hardly_trie::Trie find: {elapsed:?}");
+    let now = Instant::now();
+    remove_all(&mut trie);
+    let elapsed = now.elapsed();
+    println!("hardly_trie::Trie remove_all: {elapsed:?}");
 }
 
 impl Collection for HashMap<String, String> {
@@ -53,6 +64,10 @@ impl Collection for HashMap<String, String> {
     fn size(&self) -> usize {
         self.len()
     }
+
+    fn remove(&mut self, key: &str) -> Option<String> {
+        self.remove(key)
+    }
 }
 
 #[test]
@@ -66,6 +81,10 @@ fn insert_all_hashmap() {
     find_all(&hashmap);
     let elapsed = now.elapsed();
     println!("std::HashMap find: {elapsed:?}");
+    let now = Instant::now();
+    remove_all(&mut hashmap);
+    let elapsed = now.elapsed();
+    println!("std::HashMap remove_all: {elapsed:?}");
 }
 
 impl Collection for RxTrie<String, String> {
@@ -80,6 +99,10 @@ impl Collection for RxTrie<String, String> {
     fn size(&self) -> usize {
         self.len()
     }
+
+    fn remove(&mut self, key: &str) -> Option<String> {
+        self.remove(key)
+    }
 }
 
 #[test]
@@ -93,6 +116,10 @@ fn insert_all_radixtrie() {
     find_all(&trie);
     let elapsed = now.elapsed();
     println!("radix_trie::Trie find: {elapsed:?}");
+    let now = Instant::now();
+    remove_all(&mut trie);
+    let elapsed = now.elapsed();
+    println!("radix_trie::Trie remove_all: {elapsed:?}");
 }
 
 fn insert_all<C: Collection>(c: &mut C) {
@@ -120,3 +147,22 @@ fn find_all<C: Collection>(c: &C) {
     assert_eq!(not_found, 0);
     assert_eq!(found, c.size());
 }
+
+fn remove_all<C: Collection>(c: &mut C) {
+    let orig_size = c.size();
+    let mut found: usize = 0;
+    let mut not_found: usize = 0;
+    for line in CONTENTS.lines() {
+        let line = line.strip_prefix('"').unwrap_or(line);
+        let line = line.strip_suffix('"').unwrap_or(line);
+        if c.remove(line).is_some() {
+            found += 1;
+        } else {
+            not_found += 1;
+        }
+    }
+    assert_eq!(not_found, 0);
+    assert_eq!(found, orig_size);
+}
+
+
