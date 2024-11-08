@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use hardly_trie::Trie;
+use hardly_trie::trie::Trie;
 use std::collections::HashMap;
 use radix_trie::{Trie as RxTrie, TrieCommon};
 
