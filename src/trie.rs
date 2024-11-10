@@ -51,7 +51,7 @@ impl<T> Trie<T> {
                 return None;
             }
         }
-        current_node.value_mut().as_mut()
+        current_node.value_mut()
     }
 
     #[must_use]
@@ -61,7 +61,7 @@ impl<T> Trie<T> {
         Self::build_path(key, &mut path);
         let mut branch_base = None;
         for (i, &child_index) in path.iter().enumerate() {
-            if current_node.value().is_some() || current_node.count_children() > 1 || branch_base.is_none() {
+            if current_node.value().is_some() || current_node.has_multiple_children() || branch_base.is_none() {
                 branch_base = Some(i);
             }
             if let Some(node) = current_node.child_mut(child_index) {
@@ -70,7 +70,7 @@ impl<T> Trie<T> {
                 return None;
             }
         }
-        if current_node.count_children() > 0 {
+        if current_node.has_child() {
             branch_base = None;
         }
         let retval = current_node.value_take();
@@ -89,7 +89,7 @@ impl<T> Trie<T> {
         retval
     }
 
-    pub fn insert(&mut self, key: &[u8], mut val: T) -> Option<T> {
+    pub fn insert(&mut self, key: &[u8], val: T) -> Option<T> {
         let mut current_node = &mut self.root;
         let mut path = Vec::with_capacity(2 * key.len());
         Self::build_path(key, &mut path);
@@ -97,15 +97,13 @@ impl<T> Trie<T> {
             if current_node.child(child_index).is_some() {
                 current_node = current_node.child_mut(child_index).unwrap();
             } else {
-                let new_node = TrieNode::new();
-                current_node.child_replace(child_index, new_node);
-                current_node = current_node.child_mut(child_index).unwrap();
+                current_node = current_node.child_set(child_index, TrieNode::new());
             }
         }
         if current_node.value().is_none() {
             self.len += 1;
         }
-        current_node.value_mut().replace(val)
+        current_node.value_replace(val)
     }
 
     pub fn len(&self) -> usize {
