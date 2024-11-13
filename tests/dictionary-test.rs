@@ -17,13 +17,13 @@ trait Collection {
     fn remove(&mut self, key: &str) -> Option<String>;
 }
 
-impl Collection for Trie<String> {
+impl Collection for Trie<str, String, 16> {
     fn add(&mut self, key: &str) -> Option<String> {
-        self.insert(key.as_bytes(), key.into())
+        self.insert(key, key.into())
     }
 
     fn find(&self, key: &str) -> Option<&String> {
-        self.get(key.as_bytes())
+        self.get(key)
     }
 
     fn size(&self) -> usize {
@@ -31,7 +31,7 @@ impl Collection for Trie<String> {
     }
 
     fn remove(&mut self, key: &str) -> Option<String> {
-        self.delete(key.as_bytes())
+        self.delete(key)
     }
 }
 

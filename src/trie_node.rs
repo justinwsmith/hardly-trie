@@ -1,19 +1,19 @@
-pub(crate) struct TrieNode<T> {
+pub(crate) struct TrieNode<T, const N: usize> {
     value: Option<T>,
-    next: [Option<Box<TrieNode<T>>>; 16],
+    next: [Option<Box<TrieNode<T, N>>>; N],
 }
 
-impl<T> TrieNode<T> {
+impl<T, const N: usize> TrieNode<T, N> {
     #[must_use]
-    pub(crate) fn new() -> TrieNode<T> {
+    pub(crate) fn new() -> TrieNode<T, N> {
         TrieNode {
             value: const { None },
-            next: [const { None }; 16],
+            next: [const { None }; N],
         }
     }
 
     pub(crate) fn has_child(&self) -> bool {
-        for i in 0..16 {
+        for i in 0..N {
             if self.next[i].is_some() {
                 return true;
             }
@@ -23,7 +23,7 @@ impl<T> TrieNode<T> {
 
     pub(crate) fn has_multiple_children(&self) -> bool {
         let mut count = 0;
-        for i in 0..16 {
+        for i in 0..N {
             if self.next[i].is_some() {
                 if count > 0 {
                     return true;
@@ -36,7 +36,7 @@ impl<T> TrieNode<T> {
 
     pub(crate) fn count_children(&self) -> usize {
         let mut count = 0;
-        for i in 0..16 {
+        for i in 0..N {
             if self.next[i].is_some() {
                 count += 1;
             }
@@ -60,23 +60,23 @@ impl<T> TrieNode<T> {
         self.value.as_mut()
     }
 
-    pub(crate) fn child(&self, index: usize) -> Option<&TrieNode<T>> {
+    pub(crate) fn child(&self, index: usize) -> Option<&TrieNode<T, N>> {
         self.next[index].as_deref()
     }
 
-    pub(crate) fn child_mut(&mut self, index: usize) -> Option<&mut TrieNode<T>> {
+    pub(crate) fn child_mut(&mut self, index: usize) -> Option<&mut TrieNode<T, N>> {
         self.next[index].as_deref_mut()
     }
 
-    pub(crate) fn child_take(&mut self, index: usize) -> Option<TrieNode<T>> {
+    pub(crate) fn child_take(&mut self, index: usize) -> Option<TrieNode<T, N>> {
         Some(*self.next[index].take()?)
     }
 
-    pub(crate) fn child_replace(&mut self, index: usize, node: TrieNode<T>) -> Option<TrieNode<T>> {
+    pub(crate) fn child_replace(&mut self, index: usize, node: TrieNode<T, N>) -> Option<TrieNode<T, N>> {
         Some(*(self.next[index].replace(Box::new(node))?))
     }
 
-    pub(crate) fn child_set(&mut self, index: usize, node: TrieNode<T>) -> &mut TrieNode<T> {
+    pub(crate) fn child_set(&mut self, index: usize, node: TrieNode<T, N>) -> &mut TrieNode<T, N> {
         self.next[index].insert(Box::new(node))
     }
 }

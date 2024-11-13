@@ -1,21 +1,26 @@
+use std::marker::PhantomData;
 use crate::trie_node::TrieNode;
 
-pub struct Trie<T> {
-    len: usize,
-    root: TrieNode<T>,
+pub trait TriePathBuilder<K: ?Sized> {
+    fn populate_path(key: &K, path: &mut Vec<usize>);
+    fn init_path(key: &K) -> Vec<usize>;
+
+    fn build_path(key: &K) -> Vec<usize> {
+        let mut v = Self::init_path(key);
+        Self::populate_path(key, &mut v);
+        v
+    }
 }
 
-impl<T> Trie<T> {
-    #[must_use]
-    pub fn new() -> Trie<T> {
-        Trie {
-            len: 0,
-            root: TrieNode::new(),
-        }
-    }
+pub struct Trie<K: ?Sized, T, const N: usize> {
+    len: usize,
+    root: TrieNode<T, N>,
+    _key_type: PhantomData<K>,
+}
 
-    fn build_path(bytes: &[u8], path: &mut Vec<usize>) {
-        for &byte in bytes {
+impl<T> TriePathBuilder<[u8]> for Trie<[u8], T, 16> {
+    fn populate_path(key: &[u8], path: &mut Vec<usize>) {
+        for &byte in key {
             let high_byte: usize = (byte >> 4).into();
             let low_byte: usize = (byte & 0x0F).into();
             path.push(high_byte);
@@ -23,11 +28,43 @@ impl<T> Trie<T> {
         }
     }
 
+    fn init_path(key: &[u8]) -> Vec<usize> {
+        Vec::with_capacity(2 * key.len())
+    }
+}
+
+impl<T> TriePathBuilder<str> for Trie<str, T, 16> {
+    fn populate_path(key: &str, path: &mut Vec<usize>) {
+        for &byte in key.as_bytes() {
+            let high_byte: usize = (byte >> 4).into();
+            let low_byte: usize = (byte & 0x0F).into();
+            path.push(high_byte);
+            path.push(low_byte);
+        }
+    }
+
+    fn init_path(key: &str) -> Vec<usize> {
+        Vec::with_capacity(2 * key.len())
+    }
+}
+
+impl<K: ?Sized, T, const N: usize> Trie<K, T, N>
+where
+    Trie<K, T, N>: TriePathBuilder<K>,
+{
     #[must_use]
-    pub fn get(&self, key: &[u8]) -> Option<&T> {
+    pub fn new() -> Trie<K, T, N> {
+        Trie {
+            len: 0,
+            root: TrieNode::new(),
+            _key_type: PhantomData,
+        }
+    }
+
+    #[must_use]
+    pub fn get(&self, key: &K) -> Option<&T> {
         let mut current_node = &self.root;
-        let mut path = Vec::with_capacity(2 * key.len());
-        Self::build_path(key, &mut path);
+        let mut path = <Trie<K, T, N> as TriePathBuilder<K>>::build_path(key);
         for child_index in path {
             if let Some(node) = current_node.child(child_index) {
                 current_node = node;
@@ -40,10 +77,9 @@ impl<T> Trie<T> {
 
 
     #[must_use]
-    pub fn get_mut(&mut self, key: &[u8]) -> Option<&mut T> {
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut T> {
         let mut current_node = &mut self.root;
-        let mut path = Vec::with_capacity(2 * key.len());
-        Self::build_path(key, &mut path);
+        let mut path = <Trie<K, T, N> as TriePathBuilder<K>>::build_path(key);
         for child_index in path {
             if let Some(node) = current_node.child_mut(child_index) {
                 current_node = node;
@@ -55,10 +91,9 @@ impl<T> Trie<T> {
     }
 
     #[must_use]
-    pub fn delete(&mut self, key: &[u8]) -> Option<T> {
+    pub fn delete(&mut self, key: &K) -> Option<T> {
         let mut current_node = &mut self.root;
-        let mut path = Vec::with_capacity(2 * key.len() + 1);
-        Self::build_path(key, &mut path);
+        let mut path = <Trie<K, T, N> as TriePathBuilder<K>>::build_path(key);
         let mut branch_base = None;
         for (i, &child_index) in path.iter().enumerate() {
             if current_node.value().is_some() || current_node.has_multiple_children() || branch_base.is_none() {
@@ -89,10 +124,9 @@ impl<T> Trie<T> {
         retval
     }
 
-    pub fn insert(&mut self, key: &[u8], val: T) -> Option<T> {
+    pub fn insert(&mut self, key: &K, val: T) -> Option<T> {
         let mut current_node = &mut self.root;
-        let mut path = Vec::with_capacity(2 * key.len());
-        Self::build_path(key, &mut path);
+        let mut path = <Trie<K, T, N> as TriePathBuilder<K>>::build_path(key);
         for child_index in path {
             if current_node.child(child_index).is_some() {
                 current_node = current_node.child_mut(child_index).unwrap();
@@ -115,7 +149,10 @@ impl<T> Trie<T> {
     }
 }
 
-impl<T> Default for Trie<T> {
+impl<K, T, const N: usize> Default for Trie<K, T, N>
+where
+    Trie<K, T, N>: TriePathBuilder<K>,
+{
     fn default() -> Self {
         Self::new()
     }
@@ -127,7 +164,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut trie: Trie<usize> = Trie::new();
+        let mut trie: Trie<[u8], usize, 16> = Trie::new();
 
         assert_eq!(trie.insert(&[1, 3, 7, 2], 3), None);
         assert_eq!(trie.get(&[]), None);
