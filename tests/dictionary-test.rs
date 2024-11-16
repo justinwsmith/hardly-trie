@@ -40,16 +40,17 @@ fn insert_all_trie() {
     let mut trie = Trie::new();
     let now = Instant::now();
     insert_all(&mut trie);
-    let elapsed = now.elapsed();
-    println!("hardly_trie::Trie insert: {:?} - size: {}", elapsed, trie.len());
+    let elapsed_insert = now.elapsed();
     let now = Instant::now();
     find_all(&trie);
-    let elapsed = now.elapsed();
-    println!("hardly_trie::Trie find: {elapsed:?}");
+    let elapsed_find = now.elapsed();
     let now = Instant::now();
     remove_all(&mut trie);
-    let elapsed = now.elapsed();
-    println!("hardly_trie::Trie remove_all: {elapsed:?}");
+    let elapsed_remove = now.elapsed();
+    println!("hardly_trie::Trie insert: {:?} - size: {}", elapsed_insert, trie.len());
+    println!("hardly_trie::Trie find: {elapsed_find:?}");
+    println!("hardly_trie::Trie remove_all: {elapsed_remove:?}");
+    println!("hardly_trie::Trie total: {:?}\n", elapsed_insert + elapsed_find + elapsed_remove);
 }
 
 impl Collection for HashMap<String, String> {
@@ -75,16 +76,17 @@ fn insert_all_hashmap() {
     let mut hashmap = HashMap::new();
     let now = Instant::now();
     insert_all(&mut hashmap);
-    let elapsed = now.elapsed();
-    println!("std::HashMap insert: {:?} - size: {}", elapsed, hashmap.len());
+    let elapsed_insert = now.elapsed();
     let now = Instant::now();
     find_all(&hashmap);
-    let elapsed = now.elapsed();
-    println!("std::HashMap find: {elapsed:?}");
+    let elapsed_find = now.elapsed();
     let now = Instant::now();
     remove_all(&mut hashmap);
-    let elapsed = now.elapsed();
-    println!("std::HashMap remove_all: {elapsed:?}");
+    let elapsed_remove = now.elapsed();
+    println!("std::HashMap insert: {:?} - size: {}", elapsed_insert, hashmap.len());
+    println!("std::HashMap find: {elapsed_find:?}");
+    println!("std::HashMap remove_all: {elapsed_remove:?}");
+    println!("std::HashMap total: {:?}\n", elapsed_insert + elapsed_find + elapsed_remove);
 }
 
 impl Collection for RxTrie<String, String> {
@@ -110,16 +112,17 @@ fn insert_all_radixtrie() {
     let mut trie = RxTrie::new();
     let now = Instant::now();
     insert_all(&mut trie);
-    let elapsed = now.elapsed();
-    println!("radix_trie::Trie insert: {:?} - size: {}", elapsed, trie.len());
+    let elapsed_insert = now.elapsed();
     let now = Instant::now();
     find_all(&trie);
-    let elapsed = now.elapsed();
-    println!("radix_trie::Trie find: {elapsed:?}");
+    let elapsed_find = now.elapsed();
     let now = Instant::now();
     remove_all(&mut trie);
-    let elapsed = now.elapsed();
-    println!("radix_trie::Trie remove_all: {elapsed:?}");
+    let elapsed_remove = now.elapsed();
+    println!("radix_trie::Trie insert: {:?} - size: {}", elapsed_remove, trie.len());
+    println!("radix_trie::Trie find: {elapsed_remove:?}");
+    println!("radix_trie::Trie remove_all: {elapsed_remove:?}");
+    println!("radix_trie::Trie total: {:?}\n", elapsed_insert + elapsed_find + elapsed_remove);
 }
 
 fn insert_all<C: Collection>(c: &mut C) {

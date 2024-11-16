@@ -5,6 +5,7 @@ edition = "2021"
 rust-version = "1.79.0"
 
 [dependencies]
+bitmaps = "3.2.1"
 
 [dev-dependencies]
 radix_trie = "0.2.1"
