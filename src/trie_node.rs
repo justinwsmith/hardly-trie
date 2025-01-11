@@ -93,7 +93,11 @@ impl<T, const N: usize> TrieNode<T, N> {
         Some(*self.next[index].take()?)
     }
 
-    pub(crate) fn child_replace(&mut self, index: usize, node: TrieNode<T, N>) -> Option<TrieNode<T, N>> {
+    pub(crate) fn child_replace(
+        &mut self,
+        index: usize,
+        node: TrieNode<T, N>,
+    ) -> Option<TrieNode<T, N>> {
         if const { N <= BITMAP_SIZE } {
             self.child_bits.set(index, true);
         }

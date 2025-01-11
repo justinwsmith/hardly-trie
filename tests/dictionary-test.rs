@@ -1,8 +1,8 @@
 #![cfg(test)]
 
 use hardly_trie::trie::Trie;
-use std::collections::HashMap;
 use radix_trie::{Trie as RxTrie, TrieCommon};
+use std::collections::HashMap;
 
 const CONTENTS: &str = include_str!("./data/wordlist/wordlist-20210729.txt");
 
@@ -47,10 +47,17 @@ fn insert_all_trie() {
     let now = Instant::now();
     remove_all(&mut trie);
     let elapsed_remove = now.elapsed();
-    println!("hardly_trie::Trie insert: {:?} - size: {}", elapsed_insert, trie.len());
+    println!(
+        "hardly_trie::Trie insert: {:?} - size: {}",
+        elapsed_insert,
+        trie.len()
+    );
     println!("hardly_trie::Trie find: {elapsed_find:?}");
     println!("hardly_trie::Trie remove_all: {elapsed_remove:?}");
-    println!("hardly_trie::Trie total: {:?}\n", elapsed_insert + elapsed_find + elapsed_remove);
+    println!(
+        "hardly_trie::Trie total: {:?}\n",
+        elapsed_insert + elapsed_find + elapsed_remove
+    );
 }
 
 impl Collection for HashMap<String, String> {
@@ -83,10 +90,17 @@ fn insert_all_hashmap() {
     let now = Instant::now();
     remove_all(&mut hashmap);
     let elapsed_remove = now.elapsed();
-    println!("std::HashMap insert: {:?} - size: {}", elapsed_insert, hashmap.len());
+    println!(
+        "std::HashMap insert: {:?} - size: {}",
+        elapsed_insert,
+        hashmap.len()
+    );
     println!("std::HashMap find: {elapsed_find:?}");
     println!("std::HashMap remove_all: {elapsed_remove:?}");
-    println!("std::HashMap total: {:?}\n", elapsed_insert + elapsed_find + elapsed_remove);
+    println!(
+        "std::HashMap total: {:?}\n",
+        elapsed_insert + elapsed_find + elapsed_remove
+    );
 }
 
 impl Collection for RxTrie<String, String> {
@@ -119,10 +133,17 @@ fn insert_all_radixtrie() {
     let now = Instant::now();
     remove_all(&mut trie);
     let elapsed_remove = now.elapsed();
-    println!("radix_trie::Trie insert: {:?} - size: {}", elapsed_remove, trie.len());
+    println!(
+        "radix_trie::Trie insert: {:?} - size: {}",
+        elapsed_remove,
+        trie.len()
+    );
     println!("radix_trie::Trie find: {elapsed_remove:?}");
     println!("radix_trie::Trie remove_all: {elapsed_remove:?}");
-    println!("radix_trie::Trie total: {:?}\n", elapsed_insert + elapsed_find + elapsed_remove);
+    println!(
+        "radix_trie::Trie total: {:?}\n",
+        elapsed_insert + elapsed_find + elapsed_remove
+    );
 }
 
 fn insert_all<C: Collection>(c: &mut C) {
@@ -167,5 +188,3 @@ fn remove_all<C: Collection>(c: &mut C) {
     assert_eq!(not_found, 0);
     assert_eq!(found, orig_size);
 }
-
-

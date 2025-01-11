@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
 use crate::trie_node::TrieNode;
+use std::marker::PhantomData;
 
 pub trait TriePathBuilder<K: ?Sized> {
     fn populate_path(key: &K, path: &mut Vec<usize>);
@@ -75,7 +75,6 @@ where
         current_node.value()
     }
 
-
     #[must_use]
     pub fn get_mut(&mut self, key: &K) -> Option<&mut T> {
         let mut current_node = &mut self.root;
@@ -96,7 +95,10 @@ where
         let mut path = <Trie<K, T, N> as TriePathBuilder<K>>::build_path(key);
         let mut branch_base = None;
         for (i, &child_index) in path.iter().enumerate() {
-            if current_node.value().is_some() || current_node.has_multiple_children() || branch_base.is_none() {
+            if current_node.value().is_some()
+                || current_node.has_multiple_children()
+                || branch_base.is_none()
+            {
                 branch_base = Some(i);
             }
             if let Some(node) = current_node.child_mut(child_index) {
