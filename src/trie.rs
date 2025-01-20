@@ -1,4 +1,4 @@
-use crate::trie_node::TrieNode;
+use crate::trie_node::{TrieNode, TrieNodeChildIterator};
 use std::marker::PhantomData;
 
 pub trait TriePathBuilder<K: ?Sized> {

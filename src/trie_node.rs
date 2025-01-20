@@ -1,8 +1,10 @@
+#[cfg(feature = "bitmaps")]
 use bitmaps::Bitmap;
-
+#[cfg(feature = "bitmaps")]
 const BITMAP_SIZE: usize = 64;
 
 pub(crate) struct TrieNode<T, const N: usize> {
+    #[cfg(feature = "bitmaps")]
     child_bits: Bitmap<BITMAP_SIZE>,
     value: Option<T>,
     next: [Option<Box<TrieNode<T, N>>>; N],
@@ -12,6 +14,7 @@ impl<T, const N: usize> TrieNode<T, N> {
     #[must_use]
     pub(crate) fn new() -> TrieNode<T, N> {
         TrieNode {
+            #[cfg(feature = "bitmaps")]
             child_bits: Bitmap::new(),
             value: const { None },
             next: [const { None }; N],
@@ -19,47 +22,47 @@ impl<T, const N: usize> TrieNode<T, N> {
     }
 
     pub(crate) fn has_child(&self) -> bool {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
-            !self.child_bits.is_empty()
-        } else {
-            for i in 0..N {
-                if self.child(i).is_some() {
-                    return true;
-                }
-            }
-            false
+            return !self.child_bits.is_empty();
         }
+        for i in 0..N {
+            if self.child(i).is_some() {
+                return true;
+            }
+        }
+        false
     }
 
     pub(crate) fn has_multiple_children(&self) -> bool {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
-            self.child_bits.len() > 1
-        } else {
-            let mut count = 0;
-            for i in 0..N {
-                if self.child(i).is_some() {
-                    if count > 0 {
-                        return true;
-                    }
-                    count += 1;
-                }
-            }
-            false
+            return self.child_bits.len() > 1;
         }
+        let mut count = 0;
+        for i in 0..N {
+            if self.child(i).is_some() {
+                if count > 0 {
+                    return true;
+                }
+                count += 1;
+            }
+        }
+        false
     }
 
     pub(crate) fn count_children(&self) -> usize {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
-            self.child_bits.len()
-        } else {
-            let mut count = 0;
-            for i in 0..N {
-                if self.child(i).is_some() {
-                    count += 1;
-                }
-            }
-            count
+            return self.child_bits.len();
         }
+        let mut count = 0;
+        for i in 0..N {
+            if self.child(i).is_some() {
+                count += 1;
+            }
+        }
+        count
     }
 
     pub(crate) fn value_take(&mut self) -> Option<T> {
@@ -87,6 +90,7 @@ impl<T, const N: usize> TrieNode<T, N> {
     }
 
     pub(crate) fn child_take(&mut self, index: usize) -> Option<TrieNode<T, N>> {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
             self.child_bits.set(index, false);
         }
@@ -98,6 +102,7 @@ impl<T, const N: usize> TrieNode<T, N> {
         index: usize,
         node: TrieNode<T, N>,
     ) -> Option<TrieNode<T, N>> {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
             self.child_bits.set(index, true);
         }
@@ -105,6 +110,7 @@ impl<T, const N: usize> TrieNode<T, N> {
     }
 
     pub(crate) fn child_set(&mut self, index: usize, node: TrieNode<T, N>) -> &mut TrieNode<T, N> {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
             self.child_bits.set(index, true);
         }
@@ -130,71 +136,80 @@ impl<'a, T, const N: usize> Iterator for TrieNodeChildIterator<'a, T, N> {
     type Item = &'a TrieNode<T, N>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
             let my_index_opt = if !self.moved && self.index == 0 {
                 self.node.child_bits.first_index()
             } else {
                 self.node.child_bits.next_index(self.index)
             };
-            if let Some(index) = my_index_opt {
+            return if let Some(index) = my_index_opt {
                 self.moved = true;
                 self.index = index;
                 self.node.child(self.index)
             } else {
                 None
-            }
-        } else {
-            let mut i = self.index;
-            while i < N {
-                let child_opt = self.node.child(i);
-                if let Some(child) = child_opt {
-                    self.moved = true;
-                    self.index = i;
-                    return Some(child);
-                }
-                i += 1;
-            }
-            None
+            };
         }
+        let mut i = self.index;
+        if self.moved || self.index != 0 {
+            i += 1;
+        }
+        while i < N {
+            let child_opt = self.node.child(i);
+            if let Some(child) = child_opt {
+                self.moved = true;
+                self.index = i;
+                return Some(child);
+            }
+            i += 1;
+        }
+        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, Some(self.node.child_bits.len()))
+        #[cfg(feature = "bitmaps")]
+        return (0, Some(self.node.child_bits.len()));
+        #[cfg(not(feature = "bitmaps"))]
+        (0, Some(N))
     }
 }
 
 impl<'a, T, const N: usize> DoubleEndedIterator for TrieNodeChildIterator<'a, T, N> {
     fn next_back(&mut self) -> Option<Self::Item> {
+        #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
             let my_index_opt = if !self.moved && self.index == 0 {
                 self.node.child_bits.last_index()
             } else {
                 self.node.child_bits.prev_index(self.index)
             };
-            if let Some(index) = my_index_opt {
+            return if let Some(index) = my_index_opt {
                 self.moved = true;
                 self.index = index;
                 self.node.child(self.index)
             } else {
                 None
-            }
-        } else {
-            let mut i = if !self.moved && self.index == 0 {
-                N - 1
-            } else {
-                self.index - 1
             };
-            while i < N {
-                let child_opt = self.node.child(i);
-                if let Some(child) = child_opt {
-                    self.moved = true;
-                    self.index = i;
-                    return Some(child);
-                }
-                i -= 1;
-            }
-            None
         }
+        let mut i = if !self.moved && self.index == 0 {
+            N - 1
+        } else {
+            self.index - 1
+        };
+        while i > 0 {
+            let child_opt = self.node.child(i);
+            if let Some(child) = child_opt {
+                self.moved = true;
+                self.index = i;
+                return Some(child);
+            }
+            if i == 0 {
+                break;
+            }
+            i -= 1;
+        }
+        None
     }
 }
 
