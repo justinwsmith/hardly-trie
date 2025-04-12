@@ -85,7 +85,7 @@ impl<T, const N: usize> TrieNode<T, N> {
         self.next[index].as_deref()
     }
 
-    pub(crate) fn child_mut<'a>(&'a mut self, index: usize) -> Option<&'a mut TrieNode<T, N>> {
+    pub(crate) fn child_mut(&mut self, index: usize) -> Option<&mut TrieNode<T, N>> {
         self.next[index].as_deref_mut()
     }
 
@@ -121,7 +121,7 @@ impl<T, const N: usize> TrieNode<T, N> {
         TrieNodeChildIterator {
             moved: false,
             index,
-            node: &self,
+            node: self,
         }
     }
 }
@@ -175,7 +175,7 @@ impl<'a, T, const N: usize> Iterator for TrieNodeChildIterator<'a, T, N> {
     }
 }
 
-impl<'a, T, const N: usize> DoubleEndedIterator for TrieNodeChildIterator<'a, T, N> {
+impl<T, const N: usize> DoubleEndedIterator for TrieNodeChildIterator<'_, T, N> {
     fn next_back(&mut self) -> Option<Self::Item> {
         #[cfg(feature = "bitmaps")]
         if const { N <= BITMAP_SIZE } {
@@ -241,7 +241,7 @@ mod test {
         root.child_set(13, child13);
 
         let mut i: usize = 0;
-        for node in root.into_iter() {
+        for node in &root {
             if i == 0 {
                 assert_eq!(node.value(), Some(&2));
             } else if i == 1 {
@@ -249,7 +249,7 @@ mod test {
             } else {
                 panic!("Only 2 expected");
             }
-            i += 1
+            i += 1;
         }
         assert_eq!(i, 2);
 
@@ -290,7 +290,7 @@ mod test {
             } else {
                 panic!("Only 2 expected");
             }
-            i += 1
+            i += 1;
         }
         assert_eq!(i, 2);
 
@@ -329,7 +329,7 @@ mod test {
             } else {
                 panic!("Only 2 expected");
             }
-            i += 1
+            i += 1;
         }
         assert_eq!(i, 1);
 
@@ -340,7 +340,7 @@ mod test {
             } else {
                 panic!("Only 2 expected");
             }
-            i += 1
+            i += 1;
         }
         assert_eq!(i, 1);
 
