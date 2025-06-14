@@ -135,10 +135,10 @@ fn insert_all_radixtrie() {
     let elapsed_remove = now.elapsed();
     println!(
         "radix_trie::Trie insert: {:?} - size: {}",
-        elapsed_remove,
+        elapsed_insert,
         trie.len()
     );
-    println!("radix_trie::Trie find: {elapsed_remove:?}");
+    println!("radix_trie::Trie find: {elapsed_find:?}");
     println!("radix_trie::Trie remove_all: {elapsed_remove:?}");
     println!(
         "radix_trie::Trie total: {:?}\n",

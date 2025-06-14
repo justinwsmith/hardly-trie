@@ -51,20 +51,6 @@ impl<T, const N: usize> TrieNode<T, N> {
         false
     }
 
-    pub(crate) fn count_children(&self) -> usize {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            return self.child_bits.len();
-        }
-        let mut count = 0;
-        for i in 0..N {
-            if self.child(i).is_some() {
-                count += 1;
-            }
-        }
-        count
-    }
-
     pub(crate) fn value_take(&mut self) -> Option<T> {
         self.value.take()
     }
@@ -87,26 +73,6 @@ impl<T, const N: usize> TrieNode<T, N> {
 
     pub(crate) fn child_mut(&mut self, index: usize) -> Option<&mut TrieNode<T, N>> {
         self.next[index].as_deref_mut()
-    }
-
-    pub(crate) fn child_take(&mut self, index: usize) -> Option<TrieNode<T, N>> {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            self.child_bits.set(index, false);
-        }
-        Some(*self.next[index].take()?)
-    }
-
-    pub(crate) fn child_replace(
-        &mut self,
-        index: usize,
-        node: TrieNode<T, N>,
-    ) -> Option<TrieNode<T, N>> {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            self.child_bits.set(index, true);
-        }
-        Some(*(self.next[index].replace(Box::new(node))?))
     }
 
     pub(crate) fn child_set(&mut self, index: usize, node: TrieNode<T, N>) -> &mut TrieNode<T, N> {
