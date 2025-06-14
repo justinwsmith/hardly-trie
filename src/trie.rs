@@ -144,7 +144,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::trie::Trie;
+    use crate::trie::{Trie, TrieKey};
 
     #[test]
     fn it_works() {
@@ -178,5 +178,159 @@ mod tests {
         assert_eq!(trie.len(), 1);
         assert_eq!(trie.delete(&[]), Some(7));
         assert_eq!(trie.len(), 0);
+    }
+
+    /// Test that verifies internal node cleanup by directly inspecting trie structure.
+    /// This test would fail if child_remove was changed to child_mut in the delete function.
+    #[test]
+    fn test_internal_node_cleanup() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+
+        // Insert "test" and "testing" - "testing" extends "test" with "ing"
+        trie.insert("test", "test_value".to_string());
+        trie.insert("testing", "testing_value".to_string());
+
+        assert_eq!(trie.len(), 2);
+        assert_eq!(trie.get("test"), Some(&"test_value".to_string()));
+        assert_eq!(trie.get("testing"), Some(&"testing_value".to_string()));
+
+        // Navigate to the "test" node and verify it has children (for "ing")
+        let mut current_node = &trie.root;
+        let test_path = "test".build_path();
+        for &child_index in &test_path {
+            current_node = current_node.child(child_index).unwrap();
+        }
+        // At this point, current_node should have children for the "ing" extension
+        assert!(
+            current_node.has_child(),
+            "Node for 'test' should have children for 'ing' extension"
+        );
+
+        // Delete "testing" - this should clean up the "ing" part
+        assert_eq!(trie.delete("testing"), Some("testing_value".to_string()));
+        assert_eq!(trie.len(), 1);
+        assert_eq!(trie.get("test"), Some(&"test_value".to_string()));
+        assert_eq!(trie.get("testing"), None);
+
+        // Navigate to the "test" node again and verify it no longer has children
+        let mut current_node = &trie.root;
+        for &child_index in &test_path {
+            current_node = current_node.child(child_index).unwrap();
+        }
+        // If cleanup worked properly, the "test" node should no longer have children
+        assert!(
+            !current_node.has_child(),
+            "Node for 'test' should not have children after 'testing' is deleted"
+        );
+    }
+
+    /// Test cleanup of a single long chain with no branches
+    #[test]
+    fn test_single_chain_internal_cleanup() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+
+        // Insert a single key to create a chain
+        trie.insert("a", "value_a".to_string());
+        assert_eq!(trie.len(), 1);
+
+        // Verify the root has a child
+        assert!(trie.root.has_child(), "Root should have a child for 'a'");
+
+        // Delete the key - this should clean up the entire chain
+        assert_eq!(trie.delete("a"), Some("value_a".to_string()));
+        assert_eq!(trie.len(), 0);
+
+        // Verify the root no longer has any children
+        assert!(
+            !trie.root.has_child(),
+            "Root should not have any children after deleting 'a'"
+        );
+    }
+
+    /// Test that intermediate nodes with values are preserved during cleanup
+    #[test]
+    fn test_preserve_intermediate_nodes_internal() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+
+        // Create a scenario: "app", "apple"
+        trie.insert("app", "app_value".to_string());
+        trie.insert("apple", "apple_value".to_string());
+
+        assert_eq!(trie.len(), 2);
+
+        // Navigate to the "app" node and verify it has children for "le"
+        let mut current_node = &trie.root;
+        let app_path = "app".build_path();
+        for &child_index in &app_path {
+            current_node = current_node.child(child_index).unwrap();
+        }
+        assert!(
+            current_node.has_child(),
+            "Node for 'app' should have children for 'le' extension"
+        );
+        assert!(
+            current_node.value().is_some(),
+            "Node for 'app' should have a value"
+        );
+
+        // Delete "apple" - should not affect "app" node since it has a value
+        assert_eq!(trie.delete("apple"), Some("apple_value".to_string()));
+        assert_eq!(trie.len(), 1);
+        assert_eq!(trie.get("app"), Some(&"app_value".to_string()));
+
+        // Navigate to the "app" node again - it should still exist but have no children
+        let mut current_node = &trie.root;
+        for &child_index in &app_path {
+            current_node = current_node.child(child_index).unwrap();
+        }
+        assert!(
+            !current_node.has_child(),
+            "Node for 'app' should not have children after 'apple' is deleted"
+        );
+        assert!(
+            current_node.value().is_some(),
+            "Node for 'app' should still have its value"
+        );
+    }
+
+    /// Test the specific bug scenario - this test will fail if child_remove is changed to child_mut
+    #[test]
+    fn test_cleanup_bug_detection_internal() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+
+        // Insert "ab" and "abc" where "abc" extends "ab"
+        trie.insert("ab", "ab_value".to_string());
+        trie.insert("abc", "abc_value".to_string());
+
+        assert_eq!(trie.len(), 2);
+
+        // Navigate to the "ab" node and verify it has a child for "c"
+        let mut current_node = &trie.root;
+        let ab_path = "ab".build_path();
+        for &child_index in &ab_path {
+            current_node = current_node.child(child_index).unwrap();
+        }
+        assert!(
+            current_node.has_child(),
+            "Node for 'ab' should have a child for 'c'"
+        );
+
+        // Delete "abc" - this should trigger cleanup of the "c" extension
+        assert_eq!(trie.delete("abc"), Some("abc_value".to_string()));
+        assert_eq!(trie.len(), 1);
+        assert_eq!(trie.get("ab"), Some(&"ab_value".to_string()));
+        assert_eq!(trie.get("abc"), None);
+
+        // Navigate to the "ab" node again - if cleanup worked, it should have no children
+        // If the bug exists (child_mut instead of child_remove), the "c" node will still be there
+        let mut current_node = &trie.root;
+        for &child_index in &ab_path {
+            current_node = current_node.child(child_index).unwrap();
+        }
+        assert!(
+            !current_node.has_child(),
+            "CLEANUP BUG: Node for 'ab' should not have children after 'abc' is deleted. \
+             If this fails, check that delete() uses child_remove() not child_mut()"
+        );
     }
 }
