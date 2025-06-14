@@ -101,7 +101,7 @@ impl<K: TrieKey<N> + ?Sized, T, const N: usize> Trie<K, T, N> {
                 for &child_index in path.iter().take(path_index) {
                     current_node = current_node.child_mut(child_index).unwrap();
                 }
-                current_node.child_mut(path[path_index]);
+                current_node.child_remove(path[path_index]);
             }
             self.len -= 1;
         }

@@ -1,11 +1,4 @@
-#[cfg(feature = "bitmaps")]
-use bitmaps::Bitmap;
-#[cfg(feature = "bitmaps")]
-const BITMAP_SIZE: usize = 64;
-
 pub(crate) struct TrieNode<T, const N: usize> {
-    #[cfg(feature = "bitmaps")]
-    child_bits: Bitmap<BITMAP_SIZE>,
     value: Option<T>,
     next: [Option<Box<TrieNode<T, N>>>; N],
 }
@@ -14,18 +7,12 @@ impl<T, const N: usize> TrieNode<T, N> {
     #[must_use]
     pub(crate) fn new() -> TrieNode<T, N> {
         TrieNode {
-            #[cfg(feature = "bitmaps")]
-            child_bits: Bitmap::new(),
             value: const { None },
             next: [const { None }; N],
         }
     }
 
     pub(crate) fn has_child(&self) -> bool {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            return !self.child_bits.is_empty();
-        }
         for i in 0..N {
             if self.child(i).is_some() {
                 return true;
@@ -35,10 +22,6 @@ impl<T, const N: usize> TrieNode<T, N> {
     }
 
     pub(crate) fn has_multiple_children(&self) -> bool {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            return self.child_bits.len() > 1;
-        }
         let mut count = 0;
         for i in 0..N {
             if self.child(i).is_some() {
@@ -75,11 +58,11 @@ impl<T, const N: usize> TrieNode<T, N> {
         self.next[index].as_deref_mut()
     }
 
+    pub(crate) fn child_remove(&mut self, index: usize) {
+        self.next[index] = None;
+    }
+
     pub(crate) fn child_set(&mut self, index: usize, node: TrieNode<T, N>) -> &mut TrieNode<T, N> {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            self.child_bits.set(index, true);
-        }
         self.next[index].insert(Box::new(node))
     }
 
@@ -102,21 +85,6 @@ impl<'a, T, const N: usize> Iterator for TrieNodeChildIterator<'a, T, N> {
     type Item = &'a TrieNode<T, N>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            let my_index_opt = if !self.moved && self.index == 0 {
-                self.node.child_bits.first_index()
-            } else {
-                self.node.child_bits.next_index(self.index)
-            };
-            return if let Some(index) = my_index_opt {
-                self.moved = true;
-                self.index = index;
-                self.node.child(self.index)
-            } else {
-                None
-            };
-        }
         let mut i = self.index;
         if self.moved || self.index != 0 {
             i += 1;
@@ -134,30 +102,12 @@ impl<'a, T, const N: usize> Iterator for TrieNodeChildIterator<'a, T, N> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        #[cfg(feature = "bitmaps")]
-        return (0, Some(self.node.child_bits.len()));
-        #[cfg(not(feature = "bitmaps"))]
         (0, Some(N))
     }
 }
 
 impl<T, const N: usize> DoubleEndedIterator for TrieNodeChildIterator<'_, T, N> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        #[cfg(feature = "bitmaps")]
-        if const { N <= BITMAP_SIZE } {
-            let my_index_opt = if !self.moved && self.index == 0 {
-                self.node.child_bits.last_index()
-            } else {
-                self.node.child_bits.prev_index(self.index)
-            };
-            return if let Some(index) = my_index_opt {
-                self.moved = true;
-                self.index = index;
-                self.node.child(self.index)
-            } else {
-                None
-            };
-        }
         let mut i = if !self.moved && self.index == 0 {
             N - 1
         } else {
