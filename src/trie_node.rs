@@ -117,7 +117,7 @@ impl<T, const N: usize> TrieNode<T, N> {
         self.next[index].insert(Box::new(node))
     }
 
-    pub(crate) fn child_iter_from(&self, index: usize) -> TrieNodeChildIterator<T, N> {
+    pub(crate) fn child_iter_from(&self, index: usize) -> TrieNodeChildIterator<'_, T, N> {
         TrieNodeChildIterator {
             moved: false,
             index,
