@@ -2,6 +2,104 @@ use crate::trie_node::TrieNode;
 use slotmap::{DefaultKey, SlotMap};
 use std::marker::PhantomData;
 
+pub struct TrieIter<'a, K, T, const N: usize>
+where
+    K: TrieKey<N> + ?Sized,
+{
+    trie: &'a Trie<K, T, N>,
+    items: Vec<(Vec<usize>, &'a T)>,
+    front_index: usize,
+    back_index: usize,
+}
+
+impl<'a, K, T, const N: usize> TrieIter<'a, K, T, N>
+where
+    K: TrieKey<N> + ?Sized,
+{
+    fn new(trie: &'a Trie<K, T, N>) -> Self {
+        let mut items = Vec::new();
+        let mut path = Vec::new();
+        Self::collect_items(trie, trie.root, &mut path, &mut items);
+
+        let back_index = if items.is_empty() { 0 } else { items.len() - 1 };
+
+        TrieIter {
+            trie,
+            items,
+            front_index: 0,
+            back_index,
+        }
+    }
+
+    fn collect_items(
+        trie: &'a Trie<K, T, N>,
+        node_key: DefaultKey,
+        path: &mut Vec<usize>,
+        items: &mut Vec<(Vec<usize>, &'a T)>,
+    ) {
+        if let Some(node) = trie.arena.get(node_key) {
+            // If this node has a value, add it to items
+            if let Some(value) = node.value() {
+                items.push((path.clone(), value));
+            }
+
+            // Recursively visit children in order
+            for i in 0..N {
+                if let Some(child_key) = node.child_key(i) {
+                    path.push(i);
+                    Self::collect_items(trie, child_key, path, items);
+                    path.pop();
+                }
+            }
+        }
+    }
+}
+
+impl<'a, K, T, const N: usize> Iterator for TrieIter<'a, K, T, N>
+where
+    K: TrieKey<N> + ?Sized,
+{
+    type Item = (Vec<usize>, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.front_index > self.back_index || self.items.is_empty() {
+            return None;
+        }
+
+        let item = self.items[self.front_index].clone();
+        self.front_index += 1;
+        Some(item)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = if self.front_index > self.back_index || self.items.is_empty() {
+            0
+        } else {
+            self.back_index - self.front_index + 1
+        };
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'a, K, T, const N: usize> DoubleEndedIterator for TrieIter<'a, K, T, N>
+where
+    K: TrieKey<N> + ?Sized,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.front_index > self.back_index || self.items.is_empty() {
+            return None;
+        }
+
+        let item = self.items[self.back_index].clone();
+        if self.back_index == 0 {
+            self.front_index = 1; // Mark as exhausted
+        } else {
+            self.back_index -= 1;
+        }
+        Some(item)
+    }
+}
+
 pub trait TrieKey<const N: usize> {
     fn populate_path(&self, path: &mut Vec<usize>);
     fn init_path(&self) -> Vec<usize>;
@@ -111,7 +209,7 @@ impl<K: TrieKey<N> + ?Sized, T, const N: usize> Trie<K, T, N> {
                 // For other nodes, check if they have a value or multiple children
                 node.value().is_some() || node.has_multiple_children()
             };
-            
+
             if has_value {
                 cleanup_index = Some(i);
                 break;
@@ -133,10 +231,10 @@ impl<K: TrieKey<N> + ?Sized, T, const N: usize> Trie<K, T, N> {
                 let parent_key = node_path[cleanup_idx];
                 let child_index = path[cleanup_idx];
                 let child_key = self.arena.get(parent_key)?.child_key(child_index)?;
-                
+
                 // Remove the child reference
                 self.arena.get_mut(parent_key)?.child_remove(child_index);
-                
+
                 // Remove all nodes from the arena that are no longer reachable
                 self.cleanup_unreachable_nodes(child_key);
             }
@@ -170,24 +268,27 @@ impl<K: TrieKey<N> + ?Sized, T, const N: usize> Trie<K, T, N> {
     pub fn insert(&mut self, key: &K, val: T) -> Option<T> {
         let mut current_key = self.root;
         let path = key.build_path();
-        
+
         for child_index in path {
             let child_key = {
                 let current_node = self.arena.get(current_key).unwrap();
                 current_node.child_key(child_index)
             };
-            
+
             if let Some(existing_child_key) = child_key {
                 current_key = existing_child_key;
             } else {
                 // Create new node
                 let new_node = TrieNode::new();
                 let new_key = self.arena.insert(new_node);
-                self.arena.get_mut(current_key).unwrap().child_set(child_index, new_key);
+                self.arena
+                    .get_mut(current_key)
+                    .unwrap()
+                    .child_set(child_index, new_key);
                 current_key = new_key;
             }
         }
-        
+
         let current_node = self.arena.get_mut(current_key).unwrap();
         if current_node.value().is_none() {
             self.len += 1;
@@ -201,6 +302,13 @@ impl<K: TrieKey<N> + ?Sized, T, const N: usize> Trie<K, T, N> {
 
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    /// Returns an iterator over the trie's key-value pairs.
+    /// The iterator yields `(Vec<usize>, &T)` where the `Vec<usize>` represents
+    /// the path indices that make up the key.
+    pub fn iter(&self) -> TrieIter<K, T, N> {
+        TrieIter::new(self)
     }
 }
 
@@ -417,5 +525,170 @@ mod tests {
             "CLEANUP BUG: Node for 'ab' should not have children after 'abc' is deleted. \
              If this fails, check that delete() uses child_remove() not child_mut()"
         );
+    }
+
+    #[test]
+    fn test_iterator_empty_trie() {
+        let trie: Trie<str, String, 16> = Trie::new();
+        let mut iter = trie.iter();
+
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next_back(), None);
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+    }
+
+    #[test]
+    fn test_iterator_single_element() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+        trie.insert("a", "value_a".to_string());
+
+        let mut iter = trie.iter();
+        assert_eq!(iter.size_hint(), (1, Some(1)));
+
+        // Test forward iteration
+        let (path, value) = iter.next().unwrap();
+        assert_eq!(value, &"value_a".to_string());
+        assert_eq!(path, "a".build_path());
+        assert_eq!(iter.next(), None);
+
+        // Test backward iteration on fresh iterator
+        let mut iter = trie.iter();
+        let (path, value) = iter.next_back().unwrap();
+        assert_eq!(value, &"value_a".to_string());
+        assert_eq!(path, "a".build_path());
+        assert_eq!(iter.next_back(), None);
+    }
+
+    #[test]
+    fn test_iterator_multiple_elements() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+        trie.insert("a", "value_a".to_string());
+        trie.insert("b", "value_b".to_string());
+        trie.insert("ab", "value_ab".to_string());
+
+        // Collect all elements via forward iteration
+        let forward_items: Vec<_> = trie.iter().collect();
+        assert_eq!(forward_items.len(), 3);
+
+        // Collect all elements via backward iteration
+        let backward_items: Vec<_> = trie.iter().rev().collect();
+        assert_eq!(backward_items.len(), 3);
+
+        // Forward and backward should be reverses of each other
+        let mut backward_reversed = backward_items;
+        backward_reversed.reverse();
+        assert_eq!(forward_items, backward_reversed);
+    }
+
+    #[test]
+    fn test_iterator_bidirectional() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+        trie.insert("a", "value_a".to_string());
+        trie.insert("b", "value_b".to_string());
+        trie.insert("c", "value_c".to_string());
+        trie.insert("d", "value_d".to_string());
+
+        let mut iter = trie.iter();
+        assert_eq!(iter.size_hint(), (4, Some(4)));
+
+        // Take one from front
+        let (_, front_val) = iter.next().unwrap();
+        assert_eq!(iter.size_hint(), (3, Some(3)));
+
+        // Take one from back
+        let (_, back_val) = iter.next_back().unwrap();
+        assert_eq!(iter.size_hint(), (2, Some(2)));
+
+        // Take another from front
+        let (_, front_val2) = iter.next().unwrap();
+        assert_eq!(iter.size_hint(), (1, Some(1)));
+
+        // Take last from back
+        let (_, back_val2) = iter.next_back().unwrap();
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+
+        // Should be exhausted
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next_back(), None);
+
+        // Verify we got different values
+        let all_values = vec![front_val, front_val2, back_val2, back_val];
+        let unique_values: std::collections::HashSet<_> = all_values.iter().collect();
+        assert_eq!(unique_values.len(), 4);
+    }
+
+    #[test]
+    fn test_iterator_path_reconstruction() {
+        let mut trie: Trie<[u8], String, 16> = Trie::new();
+
+        // Insert some byte arrays
+        trie.insert(&[0x12], "value_12".to_string());
+        trie.insert(&[0x34, 0x56], "value_3456".to_string());
+        trie.insert(&[], "value_empty".to_string());
+
+        let items: Vec<_> = trie.iter().collect();
+        assert_eq!(items.len(), 3);
+
+        // Verify paths match the original keys
+        for (path, value) in items {
+            if value == &"value_12".to_string() {
+                assert_eq!(path, [0x12u8].build_path());
+            } else if value == &"value_3456".to_string() {
+                assert_eq!(path, [0x34u8, 0x56u8].build_path());
+            } else if value == &"value_empty".to_string() {
+                assert_eq!(path, [].build_path());
+            } else {
+                panic!("Unexpected value: {}", value);
+            }
+        }
+    }
+
+    #[test]
+    fn test_iterator_lexicographic_order() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+
+        // Insert in non-lexicographic order
+        trie.insert("zebra", "zebra".to_string());
+        trie.insert("apple", "apple".to_string());
+        trie.insert("banana", "banana".to_string());
+        trie.insert("cherry", "cherry".to_string());
+
+        // Forward iteration should be in lexicographic order
+        let forward_values: Vec<_> = trie.iter().map(|(_, v)| v.clone()).collect();
+        let mut expected = forward_values.clone();
+        expected.sort();
+        assert_eq!(forward_values, expected);
+
+        // Backward iteration should be in reverse lexicographic order
+        let backward_values: Vec<_> = trie.iter().rev().map(|(_, v)| v.clone()).collect();
+        let mut expected_rev = expected;
+        expected_rev.reverse();
+        assert_eq!(backward_values, expected_rev);
+    }
+
+    #[test]
+    fn test_iterator_with_common_prefixes() {
+        let mut trie: Trie<str, String, 16> = Trie::new();
+
+        // Insert words with common prefixes
+        trie.insert("test", "test".to_string());
+        trie.insert("testing", "testing".to_string());
+        trie.insert("tester", "tester".to_string());
+        trie.insert("tea", "tea".to_string());
+        trie.insert("team", "team".to_string());
+
+        let all_items: Vec<_> = trie.iter().map(|(_, v)| v.clone()).collect();
+        assert_eq!(all_items.len(), 5);
+
+        // Should be in lexicographic order
+        let mut expected = all_items.clone();
+        expected.sort();
+        assert_eq!(all_items, expected);
+
+        // Test that we can iterate both ways and get all items
+        let forward_count = trie.iter().count();
+        let backward_count = trie.iter().rev().count();
+        assert_eq!(forward_count, 5);
+        assert_eq!(backward_count, 5);
     }
 }
