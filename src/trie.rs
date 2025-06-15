@@ -1,4 +1,5 @@
-use crate::trie_node::{TrieNode, TrieNodeChildIterator};
+use crate::trie_node::TrieNode;
+use slotmap::{DefaultKey, SlotMap};
 use std::marker::PhantomData;
 
 pub trait TrieKey<const N: usize> {
@@ -14,7 +15,8 @@ pub trait TrieKey<const N: usize> {
 
 pub struct Trie<K: TrieKey<N> + ?Sized, T, const N: usize> {
     len: usize,
-    root: TrieNode<T, N>,
+    arena: SlotMap<DefaultKey, TrieNode<T, N>>,
+    root: DefaultKey,
     _key_type: PhantomData<K>,
 }
 
@@ -36,88 +38,157 @@ impl<U: AsRef<[u8]> + ?Sized> TrieKey<16> for U {
 impl<K: TrieKey<N> + ?Sized, T, const N: usize> Trie<K, T, N> {
     #[must_use]
     pub fn new() -> Trie<K, T, N> {
+        let mut arena = SlotMap::new();
+        let root = arena.insert(TrieNode::new());
         Trie {
             len: 0,
-            root: TrieNode::new(),
+            arena,
+            root,
             _key_type: PhantomData,
         }
     }
 
     #[must_use]
     pub fn get(&self, key: &K) -> Option<&T> {
-        let mut current_node = &self.root;
-        let mut path = key.build_path();
+        let mut current_key = self.root;
+        let path = key.build_path();
         for child_index in path {
-            if let Some(node) = current_node.child(child_index) {
-                current_node = node;
+            let current_node = self.arena.get(current_key)?;
+            if let Some(child_key) = current_node.child_key(child_index) {
+                current_key = child_key;
             } else {
                 return None;
             }
         }
-        current_node.value()
+        self.arena.get(current_key)?.value()
     }
 
     #[must_use]
     pub fn get_mut(&mut self, key: &K) -> Option<&mut T> {
-        let mut current_node = &mut self.root;
-        let mut path = key.build_path();
+        let mut current_key = self.root;
+        let path = key.build_path();
         for child_index in path {
-            if let Some(node) = current_node.child_mut(child_index) {
-                current_node = node;
-            } else {
-                return None;
-            }
+            let child_key = {
+                let current_node = self.arena.get(current_key)?;
+                current_node.child_key(child_index)?
+            };
+            current_key = child_key;
         }
-        current_node.value_mut()
+        self.arena.get_mut(current_key)?.value_mut()
     }
 
     #[must_use]
     pub fn delete(&mut self, key: &K) -> Option<T> {
-        let mut current_node = &mut self.root;
-        let mut path = key.build_path();
-        let mut branch_base = None;
-        for (i, &child_index) in path.iter().enumerate() {
-            if current_node.value().is_some()
-                || current_node.has_multiple_children()
-                || branch_base.is_none()
-            {
-                branch_base = Some(i);
-            }
-            if let Some(node) = current_node.child_mut(child_index) {
-                current_node = node;
-            } else {
-                return None;
-            }
-        }
-        if current_node.has_child() {
-            branch_base = None;
-        }
-        let retval = current_node.value_take();
+        let path = key.build_path();
+        let mut node_path = Vec::with_capacity(path.len() + 1);
+        let mut current_key = self.root;
+        node_path.push(current_key);
 
-        // Cleanup
-        if retval.is_some() {
-            if let Some(path_index) = branch_base {
-                current_node = &mut self.root;
-                for &child_index in path.iter().take(path_index) {
-                    current_node = current_node.child_mut(child_index).unwrap();
-                }
-                current_node.child_remove(path[path_index]);
-            }
-            self.len -= 1;
+        // Navigate to the target node, building the path
+        for &child_index in &path {
+            let child_key = {
+                let current_node = self.arena.get(current_key)?;
+                current_node.child_key(child_index)?
+            };
+            current_key = child_key;
+            node_path.push(current_key);
         }
+
+        // Check if the target node has a value to delete
+        let target_node = self.arena.get(current_key)?;
+        if target_node.value().is_none() {
+            return None;
+        }
+
+        // Find the cleanup point BEFORE removing the value
+        let mut cleanup_index = None;
+        for (i, &node_key) in node_path.iter().enumerate().rev() {
+            let node = self.arena.get(node_key)?;
+            let has_value = if i == node_path.len() - 1 {
+                // For the target node, we're about to remove its value, so check if it has children
+                node.has_child()
+            } else {
+                // For other nodes, check if they have a value or multiple children
+                node.value().is_some() || node.has_multiple_children()
+            };
+            
+            if has_value {
+                cleanup_index = Some(i);
+                break;
+            }
+            if i == 0 {
+                // We're at the root
+                cleanup_index = Some(0);
+                break;
+            }
+        }
+
+        // Take the value from the target node
+        let retval = self.arena.get_mut(current_key)?.value_take();
+        self.len -= 1;
+
+        // Perform cleanup if needed
+        if let Some(cleanup_idx) = cleanup_index {
+            if cleanup_idx < path.len() {
+                let parent_key = node_path[cleanup_idx];
+                let child_index = path[cleanup_idx];
+                let child_key = self.arena.get(parent_key)?.child_key(child_index)?;
+                
+                // Remove the child reference
+                self.arena.get_mut(parent_key)?.child_remove(child_index);
+                
+                // Remove all nodes from the arena that are no longer reachable
+                self.cleanup_unreachable_nodes(child_key);
+            }
+        }
+
         retval
     }
 
-    pub fn insert(&mut self, key: &K, val: T) -> Option<T> {
-        let mut current_node = &mut self.root;
-        let mut path = key.build_path();
-        for child_index in path {
-            if current_node.child(child_index).is_some() {
-                current_node = current_node.child_mut(child_index).unwrap();
-            } else {
-                current_node = current_node.child_set(child_index, TrieNode::new());
+    fn cleanup_unreachable_nodes(&mut self, start_key: DefaultKey) {
+        let mut to_remove = Vec::new();
+        let mut stack = vec![start_key];
+
+        while let Some(key) = stack.pop() {
+            if let Some(node) = self.arena.get(key) {
+                // Add all children to the stack
+                for i in 0..N {
+                    if let Some(child_key) = node.child_key(i) {
+                        stack.push(child_key);
+                    }
+                }
+                to_remove.push(key);
             }
         }
+
+        // Remove all collected nodes
+        for key in to_remove {
+            self.arena.remove(key);
+        }
+    }
+
+    pub fn insert(&mut self, key: &K, val: T) -> Option<T> {
+        let mut current_key = self.root;
+        let path = key.build_path();
+        
+        for child_index in path {
+            let child_key = {
+                let current_node = self.arena.get(current_key).unwrap();
+                current_node.child_key(child_index)
+            };
+            
+            if let Some(existing_child_key) = child_key {
+                current_key = existing_child_key;
+            } else {
+                // Create new node
+                let new_node = TrieNode::new();
+                let new_key = self.arena.insert(new_node);
+                self.arena.get_mut(current_key).unwrap().child_set(child_index, new_key);
+                current_key = new_key;
+            }
+        }
+        
+        let current_node = self.arena.get_mut(current_key).unwrap();
         if current_node.value().is_none() {
             self.len += 1;
         }
@@ -195,12 +266,14 @@ mod tests {
         assert_eq!(trie.get("testing"), Some(&"testing_value".to_string()));
 
         // Navigate to the "test" node and verify it has children (for "ing")
-        let mut current_node = &trie.root;
+        let mut current_key = trie.root;
         let test_path = "test".build_path();
         for &child_index in &test_path {
-            current_node = current_node.child(child_index).unwrap();
+            let current_node = trie.arena.get(current_key).unwrap();
+            current_key = current_node.child_key(child_index).unwrap();
         }
         // At this point, current_node should have children for the "ing" extension
+        let current_node = trie.arena.get(current_key).unwrap();
         assert!(
             current_node.has_child(),
             "Node for 'test' should have children for 'ing' extension"
@@ -213,11 +286,13 @@ mod tests {
         assert_eq!(trie.get("testing"), None);
 
         // Navigate to the "test" node again and verify it no longer has children
-        let mut current_node = &trie.root;
+        let mut current_key = trie.root;
         for &child_index in &test_path {
-            current_node = current_node.child(child_index).unwrap();
+            let current_node = trie.arena.get(current_key).unwrap();
+            current_key = current_node.child_key(child_index).unwrap();
         }
         // If cleanup worked properly, the "test" node should no longer have children
+        let current_node = trie.arena.get(current_key).unwrap();
         assert!(
             !current_node.has_child(),
             "Node for 'test' should not have children after 'testing' is deleted"
@@ -234,15 +309,17 @@ mod tests {
         assert_eq!(trie.len(), 1);
 
         // Verify the root has a child
-        assert!(trie.root.has_child(), "Root should have a child for 'a'");
+        let root_node = trie.arena.get(trie.root).unwrap();
+        assert!(root_node.has_child(), "Root should have a child for 'a'");
 
         // Delete the key - this should clean up the entire chain
         assert_eq!(trie.delete("a"), Some("value_a".to_string()));
         assert_eq!(trie.len(), 0);
 
         // Verify the root no longer has any children
+        let root_node = trie.arena.get(trie.root).unwrap();
         assert!(
-            !trie.root.has_child(),
+            !root_node.has_child(),
             "Root should not have any children after deleting 'a'"
         );
     }
@@ -259,11 +336,13 @@ mod tests {
         assert_eq!(trie.len(), 2);
 
         // Navigate to the "app" node and verify it has children for "le"
-        let mut current_node = &trie.root;
+        let mut current_key = trie.root;
         let app_path = "app".build_path();
         for &child_index in &app_path {
-            current_node = current_node.child(child_index).unwrap();
+            let current_node = trie.arena.get(current_key).unwrap();
+            current_key = current_node.child_key(child_index).unwrap();
         }
+        let current_node = trie.arena.get(current_key).unwrap();
         assert!(
             current_node.has_child(),
             "Node for 'app' should have children for 'le' extension"
@@ -279,10 +358,12 @@ mod tests {
         assert_eq!(trie.get("app"), Some(&"app_value".to_string()));
 
         // Navigate to the "app" node again - it should still exist but have no children
-        let mut current_node = &trie.root;
+        let mut current_key = trie.root;
         for &child_index in &app_path {
-            current_node = current_node.child(child_index).unwrap();
+            let current_node = trie.arena.get(current_key).unwrap();
+            current_key = current_node.child_key(child_index).unwrap();
         }
+        let current_node = trie.arena.get(current_key).unwrap();
         assert!(
             !current_node.has_child(),
             "Node for 'app' should not have children after 'apple' is deleted"
@@ -305,11 +386,13 @@ mod tests {
         assert_eq!(trie.len(), 2);
 
         // Navigate to the "ab" node and verify it has a child for "c"
-        let mut current_node = &trie.root;
+        let mut current_key = trie.root;
         let ab_path = "ab".build_path();
         for &child_index in &ab_path {
-            current_node = current_node.child(child_index).unwrap();
+            let current_node = trie.arena.get(current_key).unwrap();
+            current_key = current_node.child_key(child_index).unwrap();
         }
+        let current_node = trie.arena.get(current_key).unwrap();
         assert!(
             current_node.has_child(),
             "Node for 'ab' should have a child for 'c'"
@@ -323,10 +406,12 @@ mod tests {
 
         // Navigate to the "ab" node again - if cleanup worked, it should have no children
         // If the bug exists (child_mut instead of child_remove), the "c" node will still be there
-        let mut current_node = &trie.root;
+        let mut current_key = trie.root;
         for &child_index in &ab_path {
-            current_node = current_node.child(child_index).unwrap();
+            let current_node = trie.arena.get(current_key).unwrap();
+            current_key = current_node.child_key(child_index).unwrap();
         }
+        let current_node = trie.arena.get(current_key).unwrap();
         assert!(
             !current_node.has_child(),
             "CLEANUP BUG: Node for 'ab' should not have children after 'abc' is deleted. \

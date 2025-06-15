@@ -4,5 +4,13 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.87.0"
 
+[dependencies]
+slotmap = "1.0"
+
 [dev-dependencies]
 radix_trie = "0.2.1"
+criterion = "0.5"
+
+[[bench]]
+name = "arena_benchmark"
+harness = false
